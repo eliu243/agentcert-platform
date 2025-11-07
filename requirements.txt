@@ -1,0 +1,38 @@
+# Core API dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+
+# HTTP client
+httpx>=0.25.0
+requests>=2.31.0
+
+# Configuration
+pyyaml>=6.0
+
+# LLM for grader
+openai>=1.0.0
+anthropic>=0.7.0
+
+# Cloud deployment
+boto3>=1.28.0  # AWS EC2
+python-digitalocean>=1.17.0  # DigitalOcean
+
+# OpenTelemetry (for tool call tracking)
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-instrumentation-requests>=0.42b0
+opentelemetry-instrumentation-httpx>=0.42b0
+opentelemetry-instrumentation-openai>=0.12b0
+
+# Utilities
+python-multipart>=0.0.6  # For file uploads
+
+# Encryption for secrets management
+cryptography>=41.0.0  # For Fernet encryption
+
+# Testing (optional)
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+
