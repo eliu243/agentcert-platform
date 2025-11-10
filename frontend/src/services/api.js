@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getToken } from './auth';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
@@ -8,6 +9,38 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// Add authentication interceptor
+api.interceptors.request.use(
+  (config) => {
+    const token = getToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Handle 401 responses (unauthorized)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token is invalid or expired, redirect to login
+      const token = getToken();
+      if (token) {
+        // Clear invalid token
+        localStorage.removeItem('agentcert_auth_token');
+        // Redirect to login page
+        window.location.href = '/';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 /**
  * Deploy an agent from GitHub repository

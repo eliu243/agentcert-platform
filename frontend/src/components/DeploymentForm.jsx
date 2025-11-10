@@ -1,12 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { deployAgent } from '../services/api';
+import { getUserRepos } from '../services/auth';
 import LoadingSpinner from './LoadingSpinner';
 import StatusBadge from './StatusBadge';
 
 const DeploymentForm = ({ onDeploymentSuccess }) => {
-  const [githubRepo, setGithubRepo] = useState('');
+  const [repos, setRepos] = useState([]);
+  const [selectedRepo, setSelectedRepo] = useState('');
   const [branch, setBranch] = useState('main');
   const [entryPoint, setEntryPoint] = useState('agent.py');
+  const [loadingRepos, setLoadingRepos] = useState(true);
+  const [repoError, setRepoError] = useState(null);
   const [apiKeys, setApiKeys] = useState([]); // Array of { key: string, value: string }
   const [selectedApiKeyType, setSelectedApiKeyType] = useState('');
   const [customKeyName, setCustomKeyName] = useState('');
@@ -14,6 +18,41 @@ const DeploymentForm = ({ onDeploymentSuccess }) => {
   const [deploymentStatus, setDeploymentStatus] = useState(null);
   const [error, setError] = useState(null);
   const [showApiKeys, setShowApiKeys] = useState(false);
+
+  // Load user repositories on mount
+  useEffect(() => {
+    loadRepos();
+  }, []);
+
+  const loadRepos = async () => {
+    setLoadingRepos(true);
+    setRepoError(null);
+    try {
+      const userRepos = await getUserRepos();
+      setRepos(userRepos);
+      // Set default branch if repo is selected
+      if (userRepos.length > 0 && !selectedRepo) {
+        const firstRepo = userRepos[0];
+        setSelectedRepo(firstRepo.full_name);
+        setBranch(firstRepo.default_branch || 'main');
+      }
+    } catch (err) {
+      setRepoError(err.message);
+      console.error('Error loading repositories:', err);
+    } finally {
+      setLoadingRepos(false);
+    }
+  };
+
+  // Update branch when repo changes
+  useEffect(() => {
+    if (selectedRepo) {
+      const repo = repos.find(r => r.full_name === selectedRepo);
+      if (repo) {
+        setBranch(repo.default_branch || 'main');
+      }
+    }
+  }, [selectedRepo, repos]);
 
   // Predefined API key options
   const apiKeyOptions = [
@@ -80,8 +119,24 @@ const DeploymentForm = ({ onDeploymentSuccess }) => {
         }
       });
 
+      if (!selectedRepo) {
+        setError('Please select a repository');
+        setIsDeploying(false);
+        return;
+      }
+
+      // Find the selected repo to get its clone URL
+      const repo = repos.find(r => r.full_name === selectedRepo);
+      if (!repo) {
+        setError('Selected repository not found');
+        setIsDeploying(false);
+        return;
+      }
+
+      const githubRepoUrl = repo.clone_url || `https://github.com/${selectedRepo}.git`;
+
       const result = await deployAgent(
-        githubRepo,
+        githubRepoUrl,
         branch,
         entryPoint,
         Object.keys(allApiKeys).length > 0 ? allApiKeys : null
@@ -103,20 +158,48 @@ const DeploymentForm = ({ onDeploymentSuccess }) => {
       <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">Deploy Agent</h2>
       
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* GitHub Repository URL */}
+        {/* GitHub Repository Selection */}
         <div>
           <label htmlFor="githubRepo" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            GitHub Repository URL *
+            GitHub Repository *
           </label>
-          <input
-            type="text"
-            id="githubRepo"
-            value={githubRepo}
-            onChange={(e) => setGithubRepo(e.target.value)}
-            required
-            placeholder="https://github.com/username/repo.git"
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:border-blue-400"
-          />
+          {loadingRepos ? (
+            <div className="flex items-center gap-2">
+              <LoadingSpinner size="sm" />
+              <span className="text-sm text-gray-600 dark:text-gray-400">Loading repositories...</span>
+            </div>
+          ) : repoError ? (
+            <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+              <p className="text-sm text-red-800 dark:text-red-200 mb-2">{repoError}</p>
+              <button
+                type="button"
+                onClick={loadRepos}
+                className="text-sm text-red-600 dark:text-red-400 hover:underline"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <select
+              id="githubRepo"
+              value={selectedRepo}
+              onChange={(e) => setSelectedRepo(e.target.value)}
+              required
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:border-blue-400"
+            >
+              <option value="">Select a repository...</option>
+              {repos.map((repo) => (
+                <option key={repo.id} value={repo.full_name}>
+                  {repo.full_name} {repo.private ? '(Private)' : ''}
+                </option>
+              ))}
+            </select>
+          )}
+          {repos.length > 0 && !loadingRepos && (
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {repos.length} repository{repos.length !== 1 ? 'ies' : ''} available
+            </p>
+          )}
         </div>
 
         {/* Branch */}
@@ -299,7 +382,7 @@ const DeploymentForm = ({ onDeploymentSuccess }) => {
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={isDeploying || !githubRepo}
+          disabled={isDeploying || !selectedRepo || loadingRepos}
           className="w-full px-6 py-3 bg-blue-600 dark:bg-blue-700 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
         >
           {isDeploying ? (
