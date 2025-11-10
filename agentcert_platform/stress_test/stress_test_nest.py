@@ -27,12 +27,13 @@ class StressTestService:
         self.active_tests: Dict[str, Dict[str, Any]] = {}  # In-memory storage
         self.results_storage: Dict[str, Dict[str, Any]] = {}  # Test results
     
-    async def run_stress_test(self, agent_id: str) -> Dict[str, Any]:
+    async def run_stress_test(self, agent_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Run stress test on a deployed agent.
         
         Args:
             agent_id: Agent ID to test
+            user_id: Optional user ID (for user-scoped deployments)
         
         Returns:
             Dictionary with test results
@@ -42,7 +43,7 @@ class StressTestService:
         logger.info(f"Starting stress test {test_id} for agent {agent_id}")
         
         # Get agent info (from deployment service)
-        agent_info = await self._get_agent_info(agent_id)
+        agent_info = await self._get_agent_info(agent_id, user_id=user_id)
         if not agent_info:
             raise ValueError(f"Agent {agent_id} not found or not registered")
         
@@ -235,12 +236,15 @@ class StressTestService:
         
         return {}
     
-    async def _get_agent_info(self, agent_id: str) -> Optional[Dict[str, Any]]:
+    async def _get_agent_info(self, agent_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Get agent info from deployment service"""
         try:
             # Import the same instance used by the deploy route
-            from ..api.routes.deploy import deployment_service
-            deployment_info = await deployment_service.get_deployment_status(agent_id)
+            from ..api.utils import get_deployment_service
+            deployment_service = get_deployment_service()
+            # user_id is optional - if not provided, it won't verify ownership
+            # but since we already verify in the route, this should work
+            deployment_info = await deployment_service.get_deployment_status(agent_id, user_id=user_id)
             return deployment_info
         except Exception as e:
             logger.error(f"Failed to get agent info for {agent_id}: {e}")

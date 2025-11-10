@@ -81,7 +81,8 @@ class DeploymentService:
         github_repo: str,
         branch: str = "main",
         entry_point: str = "agent.py",
-        agent_id: Optional[str] = None
+        agent_id: Optional[str] = None,
+        user_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Deploy an agent from GitHub repository.
@@ -91,6 +92,7 @@ class DeploymentService:
             branch: Git branch to deploy
             entry_point: Agent entry point file
             agent_id: Optional custom agent ID
+            user_id: User ID who owns this deployment
         
         Returns:
             Dictionary with deployment information
@@ -99,7 +101,10 @@ class DeploymentService:
         if not agent_id:
             agent_id = f"agent-{uuid.uuid4().hex[:8]}"
         
-        logger.info(f"Deploying agent {agent_id} from {github_repo}")
+        if not user_id:
+            raise ValueError("user_id is required")
+        
+        logger.info(f"Deploying agent {agent_id} from {github_repo} for user {user_id}")
         
         try:
             # 1. Clone repository
@@ -131,6 +136,7 @@ class DeploymentService:
             # 5. Store deployment info
             self.deployments[agent_id] = {
                 "agent_id": agent_id,
+                "user_id": user_id,
                 "github_repo": github_repo,
                 "branch": branch,
                 "repo_path": str(repo_path) if repo_path else None,
@@ -791,8 +797,14 @@ fi
         
         return False
     
-    async def get_deployment_status(self, agent_id: str) -> Dict[str, Any]:
-        """Get deployment status for an agent"""
+    async def get_deployment_status(self, agent_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get deployment status for an agent.
+        
+        Args:
+            agent_id: Agent ID to get status for
+            user_id: Optional user ID to verify ownership
+        """
         logger.info(f"🔍 Getting deployment status for {agent_id}")
         logger.info(f"📊 Current deployments: {list(self.deployments.keys())}")
         
@@ -800,8 +812,20 @@ fi
             logger.warning(f"❌ Agent {agent_id} not found in deployments")
             raise ValueError(f"Agent {agent_id} not found")
         
-        logger.info(f"✅ Found deployment for {agent_id}: {self.deployments[agent_id].get('agent_url')}")
-        return self.deployments[agent_id]
+        deployment = self.deployments[agent_id]
+        deployment_user_id = deployment.get("user_id")
+        
+        # Check user ownership if user_id is provided
+        if user_id:
+            # If deployment has no user_id (legacy deployment), allow access but log warning
+            if deployment_user_id is None:
+                logger.warning(f"⚠️  Agent {agent_id} has no user_id (legacy deployment) - allowing access")
+            elif deployment_user_id != user_id:
+                logger.warning(f"❌ Agent {agent_id} belongs to user {deployment_user_id}, but requested by user {user_id}")
+                raise ValueError(f"Agent {agent_id} not found")
+        
+        logger.info(f"✅ Found deployment for {agent_id}: {deployment.get('agent_url')}")
+        return deployment
     
     async def _deploy_agent_locally(
         self,
@@ -969,15 +993,24 @@ fi
                 logger.error(f"Error stopping agent {agent_id}: {e}")
             del self.agent_processes[agent_id]
     
-    async def undeploy_agent(self, agent_id: str) -> Dict[str, Any]:
+    async def undeploy_agent(self, agent_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Undeploy and remove an agent.
         
         For EC2 deployments, this terminates the EC2 instance.
         For local deployments, this stops the agent process.
+        
+        Args:
+            agent_id: Agent ID to undeploy
+            user_id: User ID who owns the deployment (required for authorization)
         """
         if agent_id not in self.deployments:
             raise ValueError(f"Agent {agent_id} not found")
+        
+        # Check user ownership
+        deployment = self.deployments[agent_id]
+        if user_id and deployment.get("user_id") != user_id:
+            raise ValueError(f"Agent {agent_id} does not belong to user {user_id}")
         
         if self.use_ec2:
             # Terminate EC2 instance
@@ -1008,17 +1041,39 @@ fi
         
         return {"status": "success", "message": f"Agent {agent_id} undeployed successfully"}
     
-    async def list_deployments(self) -> Dict[str, Any]:
-        """List all deployed agents"""
-        logger.info(f"📋 Listing deployments: {len(self.deployments)} total")
-        logger.info(f"   Deployment IDs: {list(self.deployments.keys())}")
+    async def list_deployments(self, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        List deployed agents.
+        
+        Args:
+            user_id: Optional user ID to filter deployments. If provided, only returns deployments for that user.
+        """
+        # Filter deployments by user_id if provided
+        if user_id:
+            user_deployments = {
+                agent_id: info
+                for agent_id, info in self.deployments.items()
+                if info.get("user_id") == user_id
+            }
+        else:
+            user_deployments = self.deployments
+        
+        logger.info(f"📋 Listing deployments: {len(user_deployments)} total (filtered by user_id={user_id})")
+        logger.info(f"   Deployment IDs: {list(user_deployments.keys())}")
         if self.use_ec2:
-            logger.info(f"   EC2 Instances: {list(self.ec2_instances.keys())}")
+            user_ec2_instances = [
+                agent_id for agent_id in self.ec2_instances.keys()
+                if agent_id in user_deployments
+            ]
+            logger.info(f"   EC2 Instances: {user_ec2_instances}")
         
         return {
-            "deployments": list(self.deployments.keys()),
-            "count": len(self.deployments),
-            "ec2_instances": list(self.ec2_instances.keys()) if self.use_ec2 else [],
+            "deployments": list(user_deployments.keys()),
+            "count": len(user_deployments),
+            "ec2_instances": [
+                agent_id for agent_id in (self.ec2_instances.keys() if self.use_ec2 else [])
+                if agent_id in user_deployments
+            ],
             "deployment_details": {
                 agent_id: {
                     "agent_id": info.get("agent_id"),
@@ -1030,7 +1085,7 @@ fi
                     "port": info.get("port"),
                     "deployed_at": info.get("deployed_at")
                 }
-                for agent_id, info in self.deployments.items()
+                for agent_id, info in user_deployments.items()
             }
         }
 

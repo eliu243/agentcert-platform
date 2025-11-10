@@ -61,6 +61,36 @@ pip install -e ../NEST
 
 ## Configuration
 
+### Authentication Setup (Required)
+
+The platform uses GitHub OAuth for authentication. You need to create a GitHub OAuth App:
+
+1. **Create GitHub OAuth App**:
+   - Go to GitHub Settings → Developer settings → OAuth Apps
+   - Click "New OAuth App"
+   - Set:
+     - **Application name**: AgentCert Platform (or your preferred name)
+     - **Homepage URL**: `http://localhost:5173` (or your frontend URL)
+     - **Authorization callback URL**: `http://localhost:8000/api/auth/callback` (or your backend URL + `/api/auth/callback`)
+   - Click "Register application"
+   - Copy the **Client ID** and generate a **Client Secret**
+
+2. **Set Environment Variables**:
+   ```bash
+   export GITHUB_CLIENT_ID=your_client_id
+   export GITHUB_CLIENT_SECRET=your_client_secret
+   export GITHUB_CALLBACK_URL=http://localhost:8000/api/auth/callback
+   export JWT_SECRET_KEY=your-secret-key-change-in-production  # Use a strong random string
+   export JWT_ALGORITHM=HS256  # Optional, defaults to HS256
+   export SESSION_EXPIRY_HOURS=24  # Optional, defaults to 24
+   export FRONTEND_URL=http://localhost:5173  # Optional, defaults to http://localhost:5173
+   ```
+
+3. **For Production**:
+   - Update callback URL to your production backend URL
+   - Use a strong, randomly generated `JWT_SECRET_KEY`
+   - Update `FRONTEND_URL` to your production frontend URL
+
 ### Local Deployment (Default)
 
 By default, agents are deployed locally on your machine. No additional configuration needed.
@@ -140,6 +170,8 @@ The frontend will be available at `http://localhost:5173`
 
 ### Frontend Features
 
+- **GitHub OAuth Login**: Secure authentication with GitHub
+- **Repository Selection**: Select from your GitHub repositories (no need to copy/paste URLs)
 - **Deploy Agent**: Deploy agents from GitHub repositories with API key management
 - **Run Security Tests**: Start stress tests on deployed agents with real-time status polling
 - **View Results**: View comprehensive security test results including:
@@ -149,6 +181,8 @@ The frontend will be available at `http://localhost:5173`
   - Performance metrics
   - A2A communication logs
   - Export results as JSON
+- **User-Scoped Deployments**: Each user sees only their own deployments
+- **Dark Mode**: Toggle between light and dark themes
 
 ### Building for Production
 
@@ -160,6 +194,25 @@ npm run build
 The production build will be in the `frontend/dist/` directory and can be served statically or integrated with the backend.
 
 ## API Endpoints
+
+**Note**: All API endpoints (except `/health` and authentication endpoints) require authentication. Include a JWT token in the `Authorization: Bearer <token>` header.
+
+### Authentication
+
+#### `GET /api/auth/login`
+Initiate GitHub OAuth login flow. Redirects to GitHub authorization page.
+
+#### `GET /api/auth/callback`
+OAuth callback endpoint (handled automatically by GitHub).
+
+#### `GET /api/auth/me`
+Get current user information. Requires authentication.
+
+#### `GET /api/auth/repos`
+Get user's GitHub repositories. Requires authentication.
+
+#### `POST /api/auth/logout`
+Logout current user and invalidate session. Requires authentication.
 
 ### Deployment
 
@@ -196,8 +249,8 @@ Get deployment status for an agent.
 #### `DELETE /api/deploy/{agent_id}`
 Undeploy an agent and clean up resources.
 
-#### `GET /api/deploy/list`
-List all deployed agents.
+#### `GET /api/deploy`
+List all deployed agents for the current user. Requires authentication.
 
 ### Testing
 
@@ -410,7 +463,14 @@ agentcert-platform/
 ├── agentcert_platform/
 │   ├── api/                 # FastAPI backend
 │   │   ├── main.py         # Main application
+│   │   ├── auth/           # Authentication module
+│   │   │   ├── auth_service.py  # OAuth and session management
+│   │   │   └── dependencies.py  # Auth dependencies
 │   │   ├── routes/         # API routes
+│   │   │   ├── auth.py     # Authentication routes
+│   │   │   ├── deploy.py   # Deployment routes
+│   │   │   ├── test.py     # Testing routes
+│   │   │   └── results.py  # Results routes
 │   │   └── models/         # Pydantic models
 │   ├── deployment/         # Deployment service
 │   │   ├── deployer.py     # Local/EC2 deployment
@@ -426,7 +486,8 @@ agentcert-platform/
 ├── frontend/               # React frontend
 │   ├── src/
 │   │   ├── components/     # React components
-│   │   ├── services/       # API client
+│   │   ├── contexts/       # React contexts (AuthContext)
+│   │   ├── services/       # API client and auth service
 │   │   └── App.jsx         # Main app component
 │   └── package.json        # Frontend dependencies
 ├── demo/                   # Demo agents

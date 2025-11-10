@@ -7,7 +7,7 @@ import os
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routes import deploy, test, results
+from .routes import deploy, test, results, auth
 
 # Configure logging
 logging.basicConfig(
@@ -43,6 +43,7 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(auth.router, prefix="/api", tags=["authentication"])
 app.include_router(deploy.router, prefix="/api", tags=["deployment"])
 app.include_router(test.router, prefix="/api", tags=["testing"])
 app.include_router(results.router, prefix="/api", tags=["results"])
@@ -52,10 +53,25 @@ app.include_router(results.router, prefix="/api", tags=["results"])
 async def startup_event():
     """Log deployment configuration on startup"""
     use_ec2 = os.getenv("USE_EC2", "false").lower() == "true"
+    github_client_id = os.getenv("GITHUB_CLIENT_ID")
+    jwt_secret = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
     
     print("=" * 60)
     print("🚀 AgentCert Platform API Starting")
     print("=" * 60)
+    
+    # Authentication status
+    if github_client_id:
+        print("✅ GitHub OAuth: CONFIGURED")
+        print(f"   GITHUB_CLIENT_ID={github_client_id[:8]}...")
+    else:
+        print("⚠️  GitHub OAuth: NOT CONFIGURED")
+        print("   Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET to enable authentication")
+    
+    if jwt_secret == "your-secret-key-change-in-production":
+        print("⚠️  JWT_SECRET_KEY: Using default (not secure for production)")
+    else:
+        print("✅ JWT_SECRET_KEY: CONFIGURED")
     
     if use_ec2:
         print("✅ EC2 Deployment Mode: ENABLED")
@@ -85,6 +101,10 @@ async def startup_event():
     # Also log via logger
     logger.info("=" * 60)
     logger.info("AgentCert Platform API Starting")
+    if github_client_id:
+        logger.info("GitHub OAuth: CONFIGURED")
+    else:
+        logger.warning("GitHub OAuth: NOT CONFIGURED")
     if use_ec2:
         logger.info("EC2 Deployment Mode: ENABLED")
     else:
