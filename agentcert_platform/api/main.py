@@ -6,6 +6,7 @@ AgentCert Platform - Main API Server
 import os
 import logging
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from .routes import deploy, test, results
 
 # Configure logging
@@ -22,8 +23,24 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Note: Security features (CORS, authentication, rate limiting) disabled for development
-# Add security middleware in production
+# Configure CORS
+# Allow frontend to make requests from localhost (development) and production domains
+origins = [
+    "http://localhost:5173",  # Vite default port
+    "http://localhost:3000",  # Alternative React port
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+    # Add production frontend URL here when deployed
+    # os.getenv("FRONTEND_URL", "https://your-frontend-domain.com"),
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Include routers
 app.include_router(deploy.router, prefix="/api", tags=["deployment"])

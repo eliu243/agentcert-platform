@@ -132,6 +132,7 @@ class DeploymentService:
             self.deployments[agent_id] = {
                 "agent_id": agent_id,
                 "github_repo": github_repo,
+                "branch": branch,
                 "repo_path": str(repo_path) if repo_path else None,
                 "entry_point": entry_point,
                 "status": "deployed",
@@ -1020,9 +1021,14 @@ fi
             "ec2_instances": list(self.ec2_instances.keys()) if self.use_ec2 else [],
             "deployment_details": {
                 agent_id: {
+                    "agent_id": info.get("agent_id"),
                     "agent_url": info.get("agent_url"),
                     "status": info.get("status"),
-                    "github_repo": info.get("github_repo")
+                    "github_repo": info.get("github_repo"),
+                    "branch": info.get("branch", "main"),
+                    "entry_point": info.get("entry_point", "agent.py"),
+                    "port": info.get("port"),
+                    "deployed_at": info.get("deployed_at")
                 }
                 for agent_id, info in self.deployments.items()
             }

@@ -1,21 +1,21 @@
 # AgentCert Platform
 
-Backend API for AI agent security testing and certification platform.
+AgentCert is an orchestration platform that provides a backend API for AI agent security testing and certification integrating with the NANDA/NEST infrastructure.
 
 ## Overview
 
 AgentCert Platform provides automated security testing for AI agents deployed on NEST infrastructure. The platform:
 
-- **Deploys customer agents** to local or cloud infrastructure (AWS EC2)
+- **Deploys customer agents** to cloud infrastructure (AWS EC2)
 - **Runs comprehensive stress tests** with malicious prompts
-- **Analyzes agent behavior** using LLM-based grading
+- **Analyzes agent behavior** using LLM-based grading and behavior analysis
 - **Provides security scores** and detailed violation reports
 - **Tracks agent-to-agent (A2A) communication** logs
 
 ## Architecture
 
 ```
-Frontend (Future) → Backend API → Deployment Service → NEST Infrastructure → Customer Agents
+Frontend → Backend API → Deployment Service → NEST Infrastructure → Customer Agents
                                     ↓
                               Stress Test Service → LLM Grader → Results Service
 ```
@@ -103,6 +103,61 @@ uvicorn agentcert_platform.api.main:app --reload --port 8000
 The API will be available at `http://localhost:8000`
 
 **API Documentation**: `http://localhost:8000/docs` (Swagger UI)
+
+## Frontend Setup
+
+The platform includes a React-based frontend dashboard for easy interaction with the backend API.
+
+### Prerequisites
+
+- Node.js 18+ and npm
+- Backend API server running on port 8000
+
+### Setup
+
+1. **Navigate to frontend directory**:
+```bash
+cd frontend
+```
+
+2. **Install dependencies**:
+```bash
+npm install
+```
+
+3. **Configure environment variables** (optional):
+```bash
+cp .env.example .env
+# Edit .env if needed (defaults to http://localhost:8000)
+```
+
+4. **Start the development server**:
+```bash
+npm run dev
+```
+
+The frontend will be available at `http://localhost:5173`
+
+### Frontend Features
+
+- **Deploy Agent**: Deploy agents from GitHub repositories with API key management
+- **Run Security Tests**: Start stress tests on deployed agents with real-time status polling
+- **View Results**: View comprehensive security test results including:
+  - Security score (0-100)
+  - Test summary (passed/failed/violations)
+  - Detailed violations table
+  - Performance metrics
+  - A2A communication logs
+  - Export results as JSON
+
+### Building for Production
+
+```bash
+cd frontend
+npm run build
+```
+
+The production build will be in the `frontend/dist/` directory and can be served statically or integrated with the backend.
 
 ## API Endpoints
 
@@ -368,9 +423,15 @@ agentcert-platform/
 │   └── grader/             # LLM-based grading
 │       ├── llm_grader.py
 │       └── scorer.py
+├── frontend/               # React frontend
+│   ├── src/
+│   │   ├── components/     # React components
+│   │   ├── services/       # API client
+│   │   └── App.jsx         # Main app component
+│   └── package.json        # Frontend dependencies
 ├── demo/                   # Demo agents
 ├── config/                 # Configuration files
-├── requirements.txt        # Dependencies
+├── requirements.txt        # Backend dependencies
 └── README.md              # This file
 ```
 
@@ -393,6 +454,10 @@ Follow PEP 8 style guidelines.
 3. Add tests
 4. Update documentation
 5. Submit pull request
+
+## Production Cloud Architecture
+
+
 
 ## License
 
