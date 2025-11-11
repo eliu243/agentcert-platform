@@ -4,69 +4,68 @@ import DeploymentForm from './components/DeploymentForm';
 import TestRunner from './components/TestRunner';
 import ResultsDashboard from './components/ResultsDashboard';
 import DeploymentsList from './components/DeploymentsList';
-import Login from './components/Login';
+import HomePage from './components/HomePage';
+import ProfileDropdown from './components/ProfileDropdown';
 import ProtectedRoute from './components/ProtectedRoute';
-import { logout } from './services/auth';
 
 function AppContent() {
   const { authenticated, loading, user, reloadUser } = useAuth();
-  const [currentAgentId, setCurrentAgentId] = useState('');
-  const [activeTab, setActiveTab] = useState('deploy'); // 'deploy', 'deployments', 'test', 'results'
-  const [deploymentComplete, setDeploymentComplete] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const [activeTab, setActiveTab] = useState('home'); // 'home', 'deploy', 'deployments'
   const [deploymentsKey, setDeploymentsKey] = useState(0); // Key to force refresh deployments list
+  const [deploymentsView, setDeploymentsView] = useState('list'); // 'list', 'test', 'results'
+  const [selectedAgentId, setSelectedAgentId] = useState(null);
 
-  // Load dark mode preference from localStorage
+  // Set dark mode as default on mount (always enabled)
   useEffect(() => {
-    const savedDarkMode = localStorage.getItem('darkMode') === 'true';
-    setDarkMode(savedDarkMode);
-    if (savedDarkMode) {
-      document.documentElement.classList.add('dark');
-    }
+    document.documentElement.classList.add('dark');
+    // Ensure it stays dark even if something tries to remove it
+    const observer = new MutationObserver(() => {
+      if (!document.documentElement.classList.contains('dark')) {
+        document.documentElement.classList.add('dark');
+      }
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+    return () => observer.disconnect();
   }, []);
 
-  // Toggle dark mode
-  const toggleDarkMode = () => {
-    const newDarkMode = !darkMode;
-    setDarkMode(newDarkMode);
-    localStorage.setItem('darkMode', newDarkMode.toString());
-    if (newDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  };
-
   const handleDeploymentSuccess = (deploymentResult) => {
-    setCurrentAgentId(deploymentResult.agent_id);
-    setDeploymentComplete(true);
     // Refresh deployments list
     setDeploymentsKey(prev => prev + 1);
-    // Automatically switch to test tab after successful deployment
-    setActiveTab('test');
+    // Switch to deployments tab after successful deployment
+    setActiveTab('deployments');
+    setDeploymentsView('list');
+  };
+
+  const handleRunTest = (agentId) => {
+    setSelectedAgentId(agentId);
+    setDeploymentsView('test');
+  };
+
+  const handleViewResults = (agentId) => {
+    setSelectedAgentId(agentId);
+    setDeploymentsView('results');
   };
 
   const handleTestComplete = (agentId) => {
-    // Automatically switch to results tab after test completes
-    setActiveTab('results');
+    // Switch to results view after test completes
+    setDeploymentsView('results');
   };
 
-  const handleRefreshResults = () => {
-    // This can be used to trigger a refresh if needed
-  };
-
-  const handleAgentSelected = (agentId) => {
-    setCurrentAgentId(agentId);
-    // Switch to test tab when an agent is selected
-    setActiveTab('test');
+  const handleBackToDeployments = () => {
+    setDeploymentsView('list');
+    setSelectedAgentId(null);
+    // Refresh deployments list when going back
+    setDeploymentsKey(prev => prev + 1);
   };
 
   const handleDeploymentDeleted = (agentId) => {
-    // If the deleted agent is the current one, clear it
-    if (currentAgentId === agentId) {
-      setCurrentAgentId('');
-      // Switch to deployments tab
-      setActiveTab('deployments');
+    // If the deleted agent is being viewed, go back to list
+    if (selectedAgentId === agentId) {
+      setDeploymentsView('list');
+      setSelectedAgentId(null);
     }
     // Refresh deployments list
     setDeploymentsKey(prev => prev + 1);
@@ -74,138 +73,132 @@ function AppContent() {
 
   const handleLoginSuccess = () => {
     reloadUser();
-    setActiveTab('deploy');
+    // Stay on home page after login, user can navigate to dashboard
+    setActiveTab('home');
   };
-
-  const handleLogout = async () => {
-    await logout();
-    // logout() already redirects, but just in case
-    window.location.reload();
-  };
-
-  // Show login if not authenticated
-  if (!authenticated && !loading) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
-  }
 
   // Show loading while checking authentication
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto"></div>
+          <p className="mt-4 text-gray-300">Loading...</p>
         </div>
+      </div>
+    );
+  }
+
+  // Show home page if not authenticated
+  if (!authenticated) {
+    return (
+      <div className="min-h-screen bg-slate-950">
+        {/* Header */}
+        <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800/50 shadow-lg overflow-visible">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 overflow-visible">
+            <div className="flex items-center justify-between overflow-visible">
+              <div className="overflow-visible" style={{ paddingBottom: '0.15em', minHeight: 'fit-content' }}>
+                <h1 
+                  className="text-4xl font-extrabold gradient-text cursor-pointer hover:scale-105 transition-transform"
+                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                >
+                  AgentCert
+                </h1>
+              </div>
+              <div className="flex items-center gap-4">
+                <ProfileDropdown onLoginSuccess={handleLoginSuccess} />
+              </div>
+            </div>
+          </div>
+        </header>
+        <HomePage />
+        {/* Footer */}
+        <footer className="bg-slate-900/80 backdrop-blur-md border-t border-slate-800/50">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <p className="text-center text-sm text-gray-400">
+              AgentCert Platform - AI Agent Security Testing & Certification
+            </p>
+          </div>
+        </footer>
       </div>
     );
   }
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+      <div className="min-h-screen bg-slate-950">
         {/* Header */}
-        <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 transition-colors">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex items-center justify-between">
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">AgentCert Platform</h1>
+        <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800/50 shadow-lg sticky top-0 z-50 overflow-visible">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 overflow-visible">
+            <div className="flex items-center justify-between overflow-visible">
+              <div className="overflow-visible" style={{ paddingBottom: '0.15em', minHeight: 'fit-content' }}>
+                <h1 
+                  className="text-4xl font-extrabold gradient-text cursor-pointer hover:scale-105 transition-transform"
+                  onClick={() => {
+                    setActiveTab('home');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                >
+                  AgentCert
+                </h1>
+              </div>
               <div className="flex items-center gap-4">
-                {user && (
-                  <div className="flex items-center gap-3">
-                    {user.avatar_url && (
-                      <img
-                        src={user.avatar_url}
-                        alt={user.github_username}
-                        className="w-8 h-8 rounded-full"
-                      />
-                    )}
-                    <span className="text-sm text-gray-600 dark:text-gray-300">
-                      {user.github_username}
-                    </span>
-                  </div>
-                )}
-                {currentAgentId && (
-                  <div className="text-sm text-gray-600 dark:text-gray-300">
-                    Agent ID: <span className="font-mono font-semibold">{currentAgentId}</span>
-                  </div>
-                )}
-                <button
-                  onClick={handleLogout}
-                  className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-                >
-                  Logout
-                </button>
-                <button
-                  onClick={toggleDarkMode}
-                  className="p-2 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                  aria-label="Toggle dark mode"
-                >
-                  {darkMode ? (
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
-                    </svg>
-                  )}
-                </button>
+                <ProfileDropdown onLoginSuccess={handleLoginSuccess} />
               </div>
             </div>
           </div>
         </header>
 
       {/* Navigation Tabs */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 transition-colors">
+      <div className="bg-slate-900/60 backdrop-blur-sm border-b border-slate-800/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex space-x-8">
             <button
+              onClick={() => {
+                setActiveTab('home');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className={`py-4 px-1 border-b-2 font-semibold text-sm transition-all ${
+                activeTab === 'home'
+                  ? 'border-cyan-400 text-cyan-400'
+                  : 'border-transparent text-gray-400 hover:text-cyan-300 hover:border-cyan-300/50'
+              }`}
+            >
+              Home
+            </button>
+            <button
               onClick={() => setActiveTab('deploy')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`py-4 px-1 border-b-2 font-semibold text-sm transition-all ${
                 activeTab === 'deploy'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
+                  ? 'border-cyan-400 text-cyan-400'
+                  : 'border-transparent text-gray-400 hover:text-cyan-300 hover:border-cyan-300/50'
               }`}
             >
               Deploy Agent
             </button>
             <button
-              onClick={() => setActiveTab('deployments')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              onClick={() => {
+                setActiveTab('deployments');
+                setDeploymentsView('list');
+              }}
+              className={`py-4 px-1 border-b-2 font-semibold text-sm transition-all ${
                 activeTab === 'deployments'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
+                  ? 'border-cyan-400 text-cyan-400'
+                  : 'border-transparent text-gray-400 hover:text-cyan-300 hover:border-cyan-300/50'
               }`}
             >
               Deployments
-            </button>
-            <button
-              onClick={() => setActiveTab('test')}
-              disabled={!currentAgentId}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'test'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
-              } ${!currentAgentId ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              Run Test
-            </button>
-            <button
-              onClick={() => setActiveTab('results')}
-              disabled={!currentAgentId}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'results'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
-              } ${!currentAgentId ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              View Results
             </button>
           </nav>
         </div>
       </div>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className={activeTab === 'home' ? '' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'}>
+        {activeTab === 'home' && (
+          <HomePage onNavigateToDeploy={() => setActiveTab('deploy')} />
+        )}
+
         {activeTab === 'deploy' && (
           <div>
             <DeploymentForm onDeploymentSuccess={handleDeploymentSuccess} />
@@ -214,51 +207,62 @@ function AppContent() {
 
         {activeTab === 'deployments' && (
           <div>
-            <DeploymentsList
-              key={deploymentsKey}
-              onAgentSelected={handleAgentSelected}
-              onDeploymentDeleted={handleDeploymentDeleted}
-            />
-          </div>
-        )}
-
-        {activeTab === 'test' && (
-          <div>
-            {currentAgentId ? (
-              <TestRunner agentId={currentAgentId} onTestComplete={handleTestComplete} />
-            ) : (
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
-                <p className="text-yellow-800 dark:text-yellow-200">
-                  Please deploy an agent first before running tests.
-                </p>
+            {deploymentsView === 'list' && (
+              <DeploymentsList
+                key={deploymentsKey}
+                onRunTest={handleRunTest}
+                onViewResults={handleViewResults}
+                onDeploymentDeleted={handleDeploymentDeleted}
+              />
+            )}
+            {deploymentsView === 'test' && selectedAgentId && (
+              <div>
+                <button
+                  onClick={handleBackToDeployments}
+                  className="mb-6 flex items-center gap-2 px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-lg text-gray-300 hover:text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Back to Deployments
+                </button>
+                <TestRunner
+                  agentId={selectedAgentId}
+                  onTestComplete={handleTestComplete}
+                />
               </div>
             )}
-          </div>
-        )}
-
-        {activeTab === 'results' && (
-          <div>
-            {currentAgentId ? (
-              <ResultsDashboard agentId={currentAgentId} onRefresh={handleRefreshResults} />
-            ) : (
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
-                <p className="text-yellow-800 dark:text-yellow-200">
-                  Please deploy an agent and run tests first to view results.
-                </p>
+            {deploymentsView === 'results' && selectedAgentId && (
+              <div>
+                <button
+                  onClick={handleBackToDeployments}
+                  className="mb-6 flex items-center gap-2 px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-lg text-gray-300 hover:text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Back to Deployments
+                </button>
+                <ResultsDashboard
+                  agentId={selectedAgentId}
+                  onRefresh={() => {}}
+                />
               </div>
             )}
           </div>
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 mt-12 transition-colors">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <p className="text-center text-sm text-gray-500 dark:text-gray-400">
-            AgentCert Platform - AI Agent Security Testing & Certification
-          </p>
-        </div>
-      </footer>
+      {/* Footer - Only show on dashboard tabs, not on home page (home page has its own footer) */}
+      {activeTab !== 'home' && (
+        <footer className="bg-slate-900/80 backdrop-blur-md border-t border-slate-800/50 mt-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <p className="text-center text-sm text-gray-400">
+              AgentCert Platform - AI Agent Security Testing & Certification
+            </p>
+          </div>
+        </footer>
+      )}
       </div>
     </ProtectedRoute>
   );

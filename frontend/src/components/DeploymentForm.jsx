@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
-import { deployAgent } from '../services/api';
+import { deployAgent, getConfig } from '../services/api';
 import { getUserRepos } from '../services/auth';
 import LoadingSpinner from './LoadingSpinner';
 import StatusBadge from './StatusBadge';
+import DeploymentProgress from './DeploymentProgress';
 
 const DeploymentForm = ({ onDeploymentSuccess }) => {
   const [repos, setRepos] = useState([]);
   const [selectedRepo, setSelectedRepo] = useState('');
   const [branch, setBranch] = useState('main');
   const [entryPoint, setEntryPoint] = useState('agent.py');
+  const [agentName, setAgentName] = useState(''); // Custom agent name
   const [loadingRepos, setLoadingRepos] = useState(true);
   const [repoError, setRepoError] = useState(null);
   const [apiKeys, setApiKeys] = useState([]); // Array of { key: string, value: string }
@@ -18,11 +20,24 @@ const DeploymentForm = ({ onDeploymentSuccess }) => {
   const [deploymentStatus, setDeploymentStatus] = useState(null);
   const [error, setError] = useState(null);
   const [showApiKeys, setShowApiKeys] = useState(false);
+  const [deploymentMode, setDeploymentMode] = useState('local');
 
   // Load user repositories on mount
   useEffect(() => {
     loadRepos();
+    loadConfig();
   }, []);
+
+  const loadConfig = async () => {
+    try {
+      const config = await getConfig();
+      setDeploymentMode(config.deployment_mode || 'local');
+    } catch (err) {
+      console.error('Error loading config:', err);
+      // Default to local mode on error
+      setDeploymentMode('local');
+    }
+  };
 
   const loadRepos = async () => {
     setLoadingRepos(true);
@@ -135,11 +150,15 @@ const DeploymentForm = ({ onDeploymentSuccess }) => {
 
       const githubRepoUrl = repo.clone_url || `https://github.com/${selectedRepo}.git`;
 
+      // Use custom agent name if provided, otherwise let backend generate one
+      const agentId = agentName.trim() || null;
+
       const result = await deployAgent(
         githubRepoUrl,
         branch,
         entryPoint,
-        Object.keys(allApiKeys).length > 0 ? allApiKeys : null
+        Object.keys(allApiKeys).length > 0 ? allApiKeys : null,
+        agentId
       );
 
       setDeploymentStatus(result);
@@ -154,27 +173,27 @@ const DeploymentForm = ({ onDeploymentSuccess }) => {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 transition-colors">
-      <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">Deploy Agent</h2>
+    <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl shadow-lg p-6 transition-colors">
+      <h2 className="text-2xl font-bold text-white mb-6">Deploy Agent</h2>
       
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* GitHub Repository Selection */}
         <div>
-          <label htmlFor="githubRepo" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <label htmlFor="githubRepo" className="block text-sm font-medium text-gray-300 mb-2">
             GitHub Repository *
           </label>
           {loadingRepos ? (
             <div className="flex items-center gap-2">
               <LoadingSpinner size="sm" />
-              <span className="text-sm text-gray-600 dark:text-gray-400">Loading repositories...</span>
+              <span className="text-sm text-gray-400">Loading repositories...</span>
             </div>
           ) : repoError ? (
-            <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-              <p className="text-sm text-red-800 dark:text-red-200 mb-2">{repoError}</p>
+            <div className="p-4 bg-red-900/20 border border-red-700/50 rounded-md">
+              <p className="text-sm text-red-200 mb-2">{repoError}</p>
               <button
                 type="button"
                 onClick={loadRepos}
-                className="text-sm text-red-600 dark:text-red-400 hover:underline"
+                className="text-sm text-red-400 hover:underline"
               >
                 Retry
               </button>
@@ -185,7 +204,7 @@ const DeploymentForm = ({ onDeploymentSuccess }) => {
               value={selectedRepo}
               onChange={(e) => setSelectedRepo(e.target.value)}
               required
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:border-blue-400"
+              className="w-full px-4 py-2 border border-slate-600 rounded-md bg-slate-700 text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
             >
               <option value="">Select a repository...</option>
               {repos.map((repo) => (
@@ -196,15 +215,33 @@ const DeploymentForm = ({ onDeploymentSuccess }) => {
             </select>
           )}
           {repos.length > 0 && !loadingRepos && (
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-xs text-gray-400">
               {repos.length} repository{repos.length !== 1 ? 'ies' : ''} available
             </p>
           )}
         </div>
 
+        {/* Agent Name */}
+        <div>
+          <label htmlFor="agentName" className="block text-sm font-medium text-gray-300 mb-2">
+            Agent Name (Optional)
+          </label>
+          <input
+            type="text"
+            id="agentName"
+            value={agentName}
+            onChange={(e) => setAgentName(e.target.value)}
+            placeholder="e.g., my-custom-agent"
+            className="w-full px-4 py-2 border border-slate-600 rounded-md bg-slate-700 text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+          />
+          <p className="mt-1 text-xs text-gray-400">
+            Custom name for this agent. If left blank, a unique ID will be auto-generated (e.g., agent-73b2b38c).
+          </p>
+        </div>
+
         {/* Branch */}
         <div>
-          <label htmlFor="branch" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <label htmlFor="branch" className="block text-sm font-medium text-gray-300 mb-2">
             Branch
           </label>
           <input
@@ -213,13 +250,13 @@ const DeploymentForm = ({ onDeploymentSuccess }) => {
             value={branch}
             onChange={(e) => setBranch(e.target.value)}
             placeholder="main"
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:border-blue-400"
+            className="w-full px-4 py-2 border border-slate-600 rounded-md bg-slate-700 text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
           />
         </div>
 
         {/* Entry Point */}
         <div>
-          <label htmlFor="entryPoint" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <label htmlFor="entryPoint" className="block text-sm font-medium text-gray-300 mb-2">
             Entry Point
           </label>
           <input
@@ -228,7 +265,7 @@ const DeploymentForm = ({ onDeploymentSuccess }) => {
             value={entryPoint}
             onChange={(e) => setEntryPoint(e.target.value)}
             placeholder="agent.py"
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:border-blue-400"
+            className="w-full px-4 py-2 border border-slate-600 rounded-md bg-slate-700 text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
           />
         </div>
 
@@ -377,6 +414,14 @@ const DeploymentForm = ({ onDeploymentSuccess }) => {
               <p className="text-sm text-green-700 dark:text-green-300 mt-1">{deploymentStatus.message}</p>
             )}
           </div>
+        )}
+
+        {/* Deployment Progress */}
+        {isDeploying && (
+          <DeploymentProgress 
+            isDeploying={isDeploying} 
+            deploymentMode={deploymentMode} 
+          />
         )}
 
         {/* Submit Button */}

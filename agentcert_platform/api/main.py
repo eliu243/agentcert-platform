@@ -128,6 +128,16 @@ async def health_check():
     return {"status": "healthy"}
 
 
+@app.get("/api/config")
+async def get_config():
+    """Get platform configuration (deployment mode, etc.)"""
+    use_ec2 = os.getenv("USE_EC2", "false").lower() == "true"
+    return {
+        "deployment_mode": "ec2" if use_ec2 else "local",
+        "use_ec2": use_ec2
+    }
+
+
 def main():
     """Main entry point for running the API server"""
     import uvicorn

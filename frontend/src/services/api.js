@@ -48,15 +48,20 @@ api.interceptors.response.use(
  * @param {string} branch - Git branch (default: "main")
  * @param {string} entryPoint - Entry point file (default: "agent.py")
  * @param {Object} apiKeys - API keys object (e.g., {OPENAI_API_KEY: "sk-..."})
+ * @param {string} agentId - Custom agent ID/name (optional, auto-generated if not provided)
  * @returns {Promise} Deployment response
  */
-export const deployAgent = async (githubRepo, branch = 'main', entryPoint = 'agent.py', apiKeys = null) => {
+export const deployAgent = async (githubRepo, branch = 'main', entryPoint = 'agent.py', apiKeys = null, agentId = null) => {
   try {
     const payload = {
       github_repo: githubRepo,
       branch: branch,
       entry_point: entryPoint,
     };
+    
+    if (agentId) {
+      payload.agent_id = agentId;
+    }
     
     if (apiKeys && Object.keys(apiKeys).length > 0) {
       payload.api_keys = apiKeys;
@@ -176,6 +181,19 @@ export const healthCheck = async () => {
     return response.data;
   } catch (error) {
     throw new Error('Health check failed');
+  }
+};
+
+/**
+ * Get platform configuration
+ * @returns {Promise} Platform configuration (deployment mode, etc.)
+ */
+export const getConfig = async () => {
+  try {
+    const response = await api.get('/api/config');
+    return response.data;
+  } catch (error) {
+    throw new Error('Failed to get configuration');
   }
 };
 

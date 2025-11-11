@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { getToken, getCurrentUser, isAuthenticated, handleCallback } from '../services/auth';
+import { getToken, getCurrentUser, isAuthenticated, handleCallback, removeToken } from '../services/auth';
 
 const AuthContext = createContext(null);
 
@@ -89,11 +89,19 @@ export const AuthProvider = ({ children }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Logout function to clear auth state
+  const handleLogout = () => {
+    removeToken();
+    setAuthenticated(false);
+    setUser(null);
+  };
+
   const value = {
     user,
     authenticated,
     loading,
     reloadUser: loadUser,
+    logout: handleLogout,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
