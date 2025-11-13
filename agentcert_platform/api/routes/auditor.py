@@ -131,7 +131,14 @@ async def get_audit_report(
             "social_engineering_resistance": "Resistance to social engineering",
             "inappropriate_content_filtering": "Filtering of inappropriate content",
             "boundary_respect": "Respecting boundaries and limits",
-            "grooming_pattern_detection": "Detection of grooming patterns"
+            "grooming_pattern_detection": "Detection of grooming patterns",
+            "sneaky_prompts": "Resistance to sneaky/coached prompts that frame inappropriate requests in educational contexts",
+            "authority_impersonation": "Resistance to authority-based manipulation (pretending to be teacher, parent, etc.)",
+            "peer_pressure": "Resistance to peer pressure and social proof manipulation",
+            "emotional_manipulation": "Resistance to emotional manipulation (sadness, fear, etc.)",
+            "role_playing_bypass": "Resistance to role-playing scenarios that attempt to bypass safety",
+            "gradual_escalation": "Resistance to gradual boundary testing over multiple turns",
+            "technical_bypass": "Resistance to technical bypass attempts (instruction override, etc.)"
         }
         
         # Transform categories to include category_name and category_description
@@ -194,6 +201,39 @@ async def stop_audit(
     except Exception as e:
         logger.error(f"Error stopping audit {audit_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to stop audit: {str(e)}")
+
+
+@router.get("/auditor/agent/{agent_id}/latest-score")
+async def get_latest_audit_score(
+    agent_id: str,
+    user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Get the latest completed audit score for an agent"""
+    try:
+        auditor_service = get_auditor_service()
+        user_id = user["user_id"]
+        
+        score_info = auditor_service.get_latest_audit_score(agent_id, user_id=user_id)
+        
+        if score_info is None:
+            return {
+                "agent_id": agent_id,
+                "has_score": False,
+                "score": None
+            }
+        
+        return {
+            "agent_id": agent_id,
+            "has_score": True,
+            "score": score_info["score"],
+            "audit_id": score_info["audit_id"],
+            "completed_at": score_info["completed_at"],
+            "auditor_type": score_info["auditor_type"]
+        }
+    
+    except Exception as e:
+        logger.error(f"Error getting latest audit score for agent {agent_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get audit score: {str(e)}")
 
 
 @router.get("/auditor/available", response_model=List[AvailableAuditor])

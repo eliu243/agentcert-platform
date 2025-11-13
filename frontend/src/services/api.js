@@ -394,3 +394,12 @@ export const listAgentAudits = async (agentId) => {
   }
 };
 
+export const getLatestAuditScore = async (agentId) => {
+  try {
+    const response = await api.get(`/api/auditor/agent/${agentId}/latest-score`);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to get audit score');
+  }
+};
+

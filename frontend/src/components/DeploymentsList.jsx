@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { listDeployments, undeployAgent, makeAgentPublic, makeAgentPrivate, listPublicAgents, getVulnerabilityReports } from '../services/api';
+import { listDeployments, undeployAgent, makeAgentPublic, makeAgentPrivate, listPublicAgents, getVulnerabilityReports, getLatestAuditScore } from '../services/api';
 import StatusBadge from './StatusBadge';
 import LoadingSpinner from './LoadingSpinner';
 
@@ -11,6 +11,7 @@ const DeploymentsList = ({ onViewReports, onStartAudit, onViewAuditReports, onDe
   const [publicAgents, setPublicAgents] = useState(new Set());
   const [togglingPublic, setTogglingPublic] = useState(new Set());
   const [agentsWithReports, setAgentsWithReports] = useState(new Set());
+  const [auditScores, setAuditScores] = useState(new Map()); // Map of agent_id -> {score, has_score}
 
   useEffect(() => {
     loadDeployments(true);
@@ -18,10 +19,13 @@ const DeploymentsList = ({ onViewReports, onStartAudit, onViewAuditReports, onDe
   }, []);
 
   useEffect(() => {
-    // Check for agents with reports (even if private now)
-    const checkForReports = async () => {
+    // Check for agents with reports (even if private now) and fetch audit scores
+    const checkForReportsAndScores = async () => {
       const agentsWithReportsSet = new Set();
+      const scoresMap = new Map();
+      
       for (const deployment of deployments) {
+        // Check for vulnerability reports
         try {
           const reports = await getVulnerabilityReports(deployment.agent_id);
           if (reports && reports.total_reports > 0) {
@@ -30,12 +34,29 @@ const DeploymentsList = ({ onViewReports, onStartAudit, onViewAuditReports, onDe
         } catch (err) {
           // Silently fail - agent might not have reports or might not be accessible
         }
+        
+        // Fetch latest audit score
+        try {
+          const scoreData = await getLatestAuditScore(deployment.agent_id);
+          if (scoreData && scoreData.has_score) {
+            scoresMap.set(deployment.agent_id, {
+              score: scoreData.score,
+              audit_id: scoreData.audit_id,
+              completed_at: scoreData.completed_at,
+              auditor_type: scoreData.auditor_type
+            });
+          }
+        } catch (err) {
+          // Silently fail - agent might not have audit scores
+        }
       }
+      
       setAgentsWithReports(agentsWithReportsSet);
+      setAuditScores(scoresMap);
     };
     
     if (deployments.length > 0) {
-      checkForReports();
+      checkForReportsAndScores();
     }
   }, [deployments]);
 
@@ -159,6 +180,15 @@ const DeploymentsList = ({ onViewReports, onStartAudit, onViewAuditReports, onDe
 
   const isPublic = (agentId) => publicAgents.has(agentId);
 
+  const formatAuditorType = (auditorType) => {
+    if (!auditorType) return 'Audit';
+    // Convert "child-safety" -> "Child Safety"
+    return auditorType
+      .split('-')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
   if (loading) {
     return (
       <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl shadow-lg p-6 transition-colors">
@@ -219,7 +249,7 @@ const DeploymentsList = ({ onViewReports, onStartAudit, onViewAuditReports, onDe
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-3">
+                  <div className="flex items-center gap-3 mb-3 flex-wrap">
                     <h3 className="text-lg font-semibold text-white">
                       {deployment.agent_id}
                     </h3>
@@ -229,6 +259,21 @@ const DeploymentsList = ({ onViewReports, onStartAudit, onViewAuditReports, onDe
                         Public
                       </span>
                     )}
+                    {auditScores.has(deployment.agent_id) && (() => {
+                      const scoreData = auditScores.get(deployment.agent_id);
+                      const auditorName = formatAuditorType(scoreData.auditor_type);
+                      return (
+                        <span className={`px-3 py-1 text-sm font-semibold rounded border ${
+                          scoreData.score >= 80
+                            ? 'bg-green-600/20 text-green-400 border-green-600/50'
+                            : scoreData.score >= 60
+                            ? 'bg-yellow-600/20 text-yellow-400 border-yellow-600/50'
+                            : 'bg-red-600/20 text-red-400 border-red-600/50'
+                        }`}>
+                          {auditorName} score: {Math.round(scoreData.score)}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">

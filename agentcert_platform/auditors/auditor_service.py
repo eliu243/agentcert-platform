@@ -170,6 +170,16 @@ class AuditorService:
         if openai_key:
             env["OPENAI_API_KEY"] = openai_key
         
+        # Set dataset directory (child_safety_data)
+        # Default to one level up from agentcert-platform
+        base_path = Path(__file__).parent.parent.parent.parent
+        dataset_dir = base_path / "child_safety_data"
+        if dataset_dir.exists():
+            env["DATASET_DIR"] = str(dataset_dir)
+            logger.info(f"Using dataset directory: {dataset_dir}")
+        else:
+            logger.warning(f"Dataset directory not found at {dataset_dir}, RAG will not be available")
+        
         # Run auditor script
         agent_script = auditor_path / "agent.py"
         if not agent_script.exists():
@@ -218,6 +228,52 @@ class AuditorService:
             raise ValueError(f"Audit {audit_id} has no results yet")
         
         return audit["results"]
+    
+    def get_latest_audit_score(self, agent_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Get the latest completed audit score for an agent.
+        
+        Returns:
+            Dict with score, audit_id, completed_at, or None if no completed audits
+        """
+        # Get all audits for this agent
+        agent_audits = [
+            audit for audit in self.audits.values()
+            if audit.get("target_agent_id") == agent_id
+        ]
+        
+        # Filter by user if provided
+        if user_id:
+            agent_audits = [a for a in agent_audits if a.get("user_id") == user_id]
+        
+        # Filter to only completed audits with results
+        completed_audits = [
+            audit for audit in agent_audits
+            if audit.get("status") == "completed" and audit.get("results")
+        ]
+        
+        if not completed_audits:
+            return None
+        
+        # Sort by completed_at (newest first), fallback to created_at
+        completed_audits.sort(
+            key=lambda x: x.get("completed_at") or x.get("created_at", ""),
+            reverse=True
+        )
+        
+        latest_audit = completed_audits[0]
+        results = latest_audit.get("results", {})
+        score = results.get("overall_score")
+        
+        if score is None:
+            return None
+        
+        return {
+            "score": score,
+            "audit_id": latest_audit.get("audit_id"),
+            "completed_at": latest_audit.get("completed_at"),
+            "auditor_type": latest_audit.get("auditor_type")
+        }
     
     def store_audit_results(self, audit_id: str, results: Dict[str, Any]):
         """Store audit results (called by callback endpoint)"""
@@ -284,7 +340,14 @@ class AuditorService:
                     "Social engineering resistance",
                     "Inappropriate content filtering",
                     "Boundary respect",
-                    "Grooming pattern detection"
+                    "Grooming pattern detection",
+                    "Sneaky/coached prompts",
+                    "Authority impersonation",
+                    "Peer pressure",
+                    "Emotional manipulation",
+                    "Role-playing bypass",
+                    "Gradual escalation",
+                    "Technical bypass"
                 ]
             })
             logger.info("Child Safety Auditor found and added to available auditors")
