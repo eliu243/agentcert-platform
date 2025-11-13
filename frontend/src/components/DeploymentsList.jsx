@@ -1,20 +1,43 @@
 import { useState, useEffect } from 'react';
-import { listDeployments, undeployAgent, makeAgentPublic, makeAgentPrivate, listPublicAgents } from '../services/api';
+import { listDeployments, undeployAgent, makeAgentPublic, makeAgentPrivate, listPublicAgents, getVulnerabilityReports } from '../services/api';
 import StatusBadge from './StatusBadge';
 import LoadingSpinner from './LoadingSpinner';
 
-const DeploymentsList = ({ onRunTest, onViewResults, onViewReports, onDeploymentDeleted }) => {
+const DeploymentsList = ({ onViewReports, onStartAudit, onViewAuditReports, onDeploymentDeleted }) => {
   const [deployments, setDeployments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deletingAgents, setDeletingAgents] = useState(new Set());
   const [publicAgents, setPublicAgents] = useState(new Set());
   const [togglingPublic, setTogglingPublic] = useState(new Set());
+  const [agentsWithReports, setAgentsWithReports] = useState(new Set());
 
   useEffect(() => {
     loadDeployments(true);
     loadPublicAgents();
   }, []);
+
+  useEffect(() => {
+    // Check for agents with reports (even if private now)
+    const checkForReports = async () => {
+      const agentsWithReportsSet = new Set();
+      for (const deployment of deployments) {
+        try {
+          const reports = await getVulnerabilityReports(deployment.agent_id);
+          if (reports && reports.total_reports > 0) {
+            agentsWithReportsSet.add(deployment.agent_id);
+          }
+        } catch (err) {
+          // Silently fail - agent might not have reports or might not be accessible
+        }
+      }
+      setAgentsWithReports(agentsWithReportsSet);
+    };
+    
+    if (deployments.length > 0) {
+      checkForReports();
+    }
+  }, [deployments]);
 
   const loadPublicAgents = async () => {
     try {
@@ -82,21 +105,21 @@ const DeploymentsList = ({ onRunTest, onViewResults, onViewReports, onDeployment
     }
   };
 
-  const handleRunTest = (agentId) => {
-    if (onRunTest) {
-      onRunTest(agentId);
-    }
-  };
-
-  const handleViewResults = (agentId) => {
-    if (onViewResults) {
-      onViewResults(agentId);
-    }
-  };
-
   const handleViewReports = (agentId) => {
     if (onViewReports) {
       onViewReports(agentId);
+    }
+  };
+
+  const handleStartAudit = (agentId) => {
+    if (onStartAudit) {
+      onStartAudit(agentId);
+    }
+  };
+
+  const handleViewAuditReports = (agentId) => {
+    if (onViewAuditReports) {
+      onViewAuditReports(agentId);
     }
   };
 
@@ -262,60 +285,37 @@ const DeploymentsList = ({ onRunTest, onViewResults, onViewReports, onDeployment
 
                 <div className="flex flex-col gap-2 ml-4">
                   <button
-                    onClick={() => handleRunTest(deployment.agent_id)}
-                    className="px-4 py-2 bg-cyan-600 text-white rounded-md hover:bg-cyan-700 text-sm transition-colors font-medium"
+                    onClick={() => handleStartAudit(deployment.agent_id)}
+                    className="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 text-sm transition-colors font-medium shadow-sm hover:shadow-md"
                   >
-                    Run Test
+                    Run Audit
                   </button>
                   <button
-                    onClick={() => handleViewResults(deployment.agent_id)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm transition-colors font-medium"
+                    onClick={() => handleViewAuditReports(deployment.agent_id)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm transition-colors font-medium shadow-sm hover:shadow-md"
                   >
-                    View Results
+                    View Audit Reports
                   </button>
-                  {isPublic(deployment.agent_id) && (
-                    <button
-                      onClick={() => handleViewReports(deployment.agent_id)}
-                      className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm transition-colors font-medium"
-                    >
-                      View Reports
-                    </button>
-                  )}
-                  {isPublic(deployment.agent_id) ? (
-                    <button
-                      onClick={() => handleMakePrivate(deployment.agent_id)}
-                      disabled={togglingPublic.has(deployment.agent_id)}
-                      className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-sm transition-colors flex items-center justify-center gap-2"
-                    >
-                      {togglingPublic.has(deployment.agent_id) ? (
-                        <>
-                          <LoadingSpinner size="sm" />
-                          <span>Updating...</span>
-                        </>
-                      ) : (
-                        'Make Private'
-                      )}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleMakePublic(deployment.agent_id)}
-                      disabled={togglingPublic.has(deployment.agent_id)}
-                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-sm transition-colors flex items-center justify-center gap-2"
-                    >
-                      {togglingPublic.has(deployment.agent_id) ? (
-                        <>
-                          <LoadingSpinner size="sm" />
-                          <span>Updating...</span>
-                        </>
-                      ) : (
-                        'Make Public'
-                      )}
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleViewReports(deployment.agent_id)}
+                    disabled={!isPublic(deployment.agent_id) && !agentsWithReports.has(deployment.agent_id)}
+                    className={`px-4 py-2 text-white rounded-md text-sm transition-colors font-medium shadow-sm hover:shadow-md ${
+                      isPublic(deployment.agent_id) || agentsWithReports.has(deployment.agent_id)
+                        ? 'bg-violet-600 hover:bg-violet-700'
+                        : 'bg-slate-600 opacity-50 cursor-not-allowed'
+                    }`}
+                    title={
+                      !isPublic(deployment.agent_id) && !agentsWithReports.has(deployment.agent_id)
+                        ? 'Make agent public to view vulnerability reports'
+                        : 'View vulnerability reports from crowdsourced testing'
+                    }
+                  >
+                    View Public Reports
+                  </button>
                   <button
                     onClick={() => handleDelete(deployment.agent_id)}
                     disabled={deletingAgents.has(deployment.agent_id)}
-                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-sm transition-colors flex items-center justify-center gap-2"
+                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-sm transition-colors flex items-center justify-center gap-2 shadow-sm hover:shadow-md"
                   >
                     {deletingAgents.has(deployment.agent_id) ? (
                       <>
@@ -327,6 +327,45 @@ const DeploymentsList = ({ onRunTest, onViewResults, onViewReports, onDeployment
                     )}
                   </button>
                 </div>
+              </div>
+              
+              {/* Public/Private Toggle at bottom left */}
+              <div className="mt-4 flex items-center gap-3">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <span className="text-sm text-gray-300">
+                    {togglingPublic.has(deployment.agent_id) ? (
+                      <span className="flex items-center gap-2">
+                        <LoadingSpinner size="sm" />
+                        <span>Updating...</span>
+                      </span>
+                    ) : (
+                      <>
+                        <span className={isPublic(deployment.agent_id) ? 'text-green-400 font-medium' : 'text-gray-400'}>
+                          {isPublic(deployment.agent_id) ? 'Public' : 'Private'}
+                        </span>
+                        <span className="text-gray-500 ml-1">
+                          {isPublic(deployment.agent_id) ? '(visible to others)' : '(only you can see)'}
+                        </span>
+                      </>
+                    )}
+                  </span>
+                  <div className="relative inline-block w-14 h-7">
+                    <input
+                      type="checkbox"
+                      checked={isPublic(deployment.agent_id)}
+                      onChange={() => {
+                        if (isPublic(deployment.agent_id)) {
+                          handleMakePrivate(deployment.agent_id);
+                        } else {
+                          handleMakePublic(deployment.agent_id);
+                        }
+                      }}
+                      disabled={togglingPublic.has(deployment.agent_id)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-14 h-7 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-green-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"></div>
+                  </div>
+                </label>
               </div>
             </div>
           ))}

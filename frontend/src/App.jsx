@@ -1,21 +1,26 @@
 import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import DeploymentForm from './components/DeploymentForm';
-import TestRunner from './components/TestRunner';
-import ResultsDashboard from './components/ResultsDashboard';
 import DeploymentsList from './components/DeploymentsList';
 import HomePage from './components/HomePage';
 import ProfileDropdown from './components/ProfileDropdown';
 import ProtectedRoute from './components/ProtectedRoute';
 import PublicTesting from './components/PublicTesting';
 import VulnerabilityReports from './components/VulnerabilityReports';
+import AuditorSelectionModal from './components/AuditorSelectionModal';
+import AuditProgress from './components/AuditProgress';
+import ChildSafetyReport from './components/ChildSafetyReport';
+import AuditReportsList from './components/AuditReportsList';
 
 function AppContent() {
   const { authenticated, loading, user, reloadUser } = useAuth();
   const [activeTab, setActiveTab] = useState('home'); // 'home', 'deploy', 'deployments'
   const [deploymentsKey, setDeploymentsKey] = useState(0); // Key to force refresh deployments list
-  const [deploymentsView, setDeploymentsView] = useState('list'); // 'list', 'test', 'results', 'reports'
+  const [deploymentsView, setDeploymentsView] = useState('list'); // 'list', 'reports', 'audit-progress', 'audit-report', 'audit-reports-list'
   const [selectedAgentId, setSelectedAgentId] = useState(null);
+  const [showAuditorModal, setShowAuditorModal] = useState(false);
+  const [auditAgentId, setAuditAgentId] = useState(null);
+  const [currentAuditId, setCurrentAuditId] = useState(null);
 
   // Set dark mode as default on mount (always enabled)
   useEffect(() => {
@@ -41,25 +46,42 @@ function AppContent() {
     setDeploymentsView('list');
   };
 
-  const handleRunTest = (agentId) => {
-    setSelectedAgentId(agentId);
-    setDeploymentsView('test');
-  };
-
-  const handleViewResults = (agentId) => {
-    setSelectedAgentId(agentId);
-    setDeploymentsView('results');
-  };
-
   const handleViewReports = (agentId) => {
     setSelectedAgentId(agentId);
     setDeploymentsView('reports');
   };
 
-  const handleTestComplete = (agentId) => {
-    // Switch to results view after test completes
-    setDeploymentsView('results');
+  const handleStartAudit = (agentId) => {
+    setAuditAgentId(agentId);
+    setShowAuditorModal(true);
   };
+
+  const handleAuditStarted = (auditId) => {
+    setCurrentAuditId(auditId);
+    setShowAuditorModal(false);
+    setDeploymentsView('audit-progress');
+  };
+
+  const handleAuditComplete = (auditId) => {
+    setCurrentAuditId(auditId);
+    setDeploymentsView('audit-report');
+  };
+
+  const handleAuditError = (error) => {
+    console.error('Audit error:', error);
+    // Could show error message or go back to list
+  };
+
+  const handleViewAuditReports = (agentId) => {
+    setSelectedAgentId(agentId);
+    setDeploymentsView('audit-reports-list');
+  };
+
+  const handleViewAudit = (auditId) => {
+    setCurrentAuditId(auditId);
+    setDeploymentsView('audit-report');
+  };
+
 
   const handleBackToDeployments = () => {
     setDeploymentsView('list');
@@ -269,45 +291,11 @@ function AppContent() {
             {deploymentsView === 'list' && (
               <DeploymentsList
                 key={deploymentsKey}
-                onRunTest={handleRunTest}
-                onViewResults={handleViewResults}
                 onViewReports={handleViewReports}
+                onStartAudit={handleStartAudit}
+                onViewAuditReports={handleViewAuditReports}
                 onDeploymentDeleted={handleDeploymentDeleted}
               />
-            )}
-            {deploymentsView === 'test' && selectedAgentId && (
-              <div>
-                <button
-                  onClick={handleBackToDeployments}
-                  className="mb-6 flex items-center gap-2 px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-lg text-gray-300 hover:text-white transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                  Back to Deployments
-                </button>
-                <TestRunner
-                  agentId={selectedAgentId}
-                  onTestComplete={handleTestComplete}
-                />
-              </div>
-            )}
-            {deploymentsView === 'results' && selectedAgentId && (
-              <div>
-                <button
-                  onClick={handleBackToDeployments}
-                  className="mb-6 flex items-center gap-2 px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-lg text-gray-300 hover:text-white transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                  Back to Deployments
-                </button>
-                <ResultsDashboard
-                  agentId={selectedAgentId}
-                  onRefresh={() => {}}
-                />
-              </div>
             )}
             {deploymentsView === 'reports' && selectedAgentId && (
               <div>
@@ -323,8 +311,71 @@ function AppContent() {
                 <VulnerabilityReports agentId={selectedAgentId} />
               </div>
             )}
+            {deploymentsView === 'audit-progress' && currentAuditId && (
+              <div>
+                <button
+                  onClick={handleBackToDeployments}
+                  className="mb-6 flex items-center gap-2 px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-lg text-gray-300 hover:text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Back to Deployments
+                </button>
+                <AuditProgress
+                  auditId={currentAuditId}
+                  onComplete={handleAuditComplete}
+                  onError={handleAuditError}
+                />
+              </div>
+            )}
+            {deploymentsView === 'audit-report' && currentAuditId && (
+              <div>
+                <button
+                  onClick={() => {
+                    if (selectedAgentId) {
+                      setDeploymentsView('audit-reports-list');
+                    } else {
+                      handleBackToDeployments();
+                    }
+                  }}
+                  className="mb-6 flex items-center gap-2 px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-lg text-gray-300 hover:text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Back
+                </button>
+                <ChildSafetyReport auditId={currentAuditId} />
+              </div>
+            )}
+            {deploymentsView === 'audit-reports-list' && selectedAgentId && (
+              <div>
+                <button
+                  onClick={handleBackToDeployments}
+                  className="mb-6 flex items-center gap-2 px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-lg text-gray-300 hover:text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Back to Deployments
+                </button>
+                <AuditReportsList agentId={selectedAgentId} onViewAudit={handleViewAudit} />
+              </div>
+            )}
           </div>
         )}
+
+        {/* Auditor Selection Modal */}
+        <AuditorSelectionModal
+          isOpen={showAuditorModal}
+          onClose={() => {
+            setShowAuditorModal(false);
+            setAuditAgentId(null);
+          }}
+          agentId={auditAgentId}
+          onAuditStarted={handleAuditStarted}
+        />
 
         {activeTab === 'public-testing' && (
           <PublicTesting />

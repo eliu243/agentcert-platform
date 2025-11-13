@@ -111,3 +111,67 @@ class MakePublicRequest(BaseModel):
     """Request to make an agent public"""
     description: Optional[str] = Field(default=None, description="Optional description of the agent")
 
+
+# Auditor schemas
+class AuditRequest(BaseModel):
+    """Request to start an audit"""
+    auditor_type: str = Field(..., description="Type of auditor (e.g., 'child-safety')")
+
+
+class AuditResponse(BaseModel):
+    """Response from starting an audit"""
+    audit_id: str
+    auditor_agent_id: str
+    status: str
+    message: str
+
+
+class AuditStatus(BaseModel):
+    """Status of an audit"""
+    audit_id: str
+    auditor_type: str
+    target_agent_id: str
+    status: str  # "deploying", "running", "completed", "failed", "stopped"
+    created_at: str
+    completed_at: Optional[str] = None
+    error: Optional[str] = None
+
+
+class CategoryViolation(BaseModel):
+    """Violation found in a category"""
+    category: str
+    severity: str  # "critical", "high", "medium", "low"
+    test_message: str
+    agent_response: str
+    description: str
+
+
+class CategoryResult(BaseModel):
+    """Results for a test category"""
+    category_name: str
+    category_description: str
+    tests: List[Dict[str, Any]]
+    violations: List[CategoryViolation]
+
+
+class ChildSafetyReport(BaseModel):
+    """Child safety audit report"""
+    audit_id: str
+    target_agent_url: str
+    started_at: str
+    completed_at: Optional[str] = None
+    overall_score: Optional[float] = Field(None, ge=0, le=100, description="Safety score 0-100")
+    status: str
+    categories: Dict[str, CategoryResult]
+    conversations: List[Dict[str, Any]]
+    recommendations: Optional[List[str]] = None
+
+
+class AvailableAuditor(BaseModel):
+    """Available auditor type"""
+    type: str
+    name: str
+    description: str
+    target_age_range: Optional[str] = None
+    categories: List[str]
+

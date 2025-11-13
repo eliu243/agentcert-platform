@@ -311,3 +311,86 @@ export const markReportAddressed = async (agentId, reportId) => {
   }
 };
 
+/**
+ * Start a child safety audit for an agent
+ * @param {string} agentId - Agent ID to audit
+ * @returns {Promise} Audit response with audit_id
+ */
+export const startChildSafetyAudit = async (agentId) => {
+  try {
+    const response = await api.post(`/api/auditor/child-safety/${agentId}`);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to start audit');
+  }
+};
+
+/**
+ * Get status of an audit
+ * @param {string} auditId - Audit ID
+ * @returns {Promise} Audit status
+ */
+export const getAuditStatus = async (auditId) => {
+  try {
+    const response = await api.get(`/api/auditor/audit/${auditId}/status`);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to get audit status');
+  }
+};
+
+/**
+ * Get audit report (results)
+ * @param {string} auditId - Audit ID
+ * @returns {Promise} Audit report
+ */
+export const getAuditReport = async (auditId) => {
+  try {
+    const response = await api.get(`/api/auditor/audit/${auditId}/report`);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to get audit report');
+  }
+};
+
+/**
+ * Stop a running audit
+ * @param {string} auditId - Audit ID
+ * @returns {Promise} Response
+ */
+export const stopAudit = async (auditId) => {
+  try {
+    const response = await api.post(`/api/auditor/audit/${auditId}/stop`);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to stop audit');
+  }
+};
+
+/**
+ * Get list of available auditors
+ * @returns {Promise} List of available auditors
+ */
+export const getAvailableAuditors = async () => {
+  try {
+    const response = await api.get('/api/auditor/available');
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to get available auditors');
+  }
+};
+
+/**
+ * List all audits for an agent
+ * @param {string} agentId - Agent ID
+ * @returns {Promise} List of audits for the agent
+ */
+export const listAgentAudits = async (agentId) => {
+  try {
+    const response = await api.get(`/api/auditor/agent/${agentId}/audits`);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to list audits');
+  }
+};
+
