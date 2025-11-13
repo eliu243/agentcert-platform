@@ -1,0 +1,38 @@
+config:
+  tracing:
+    otlpEndpoint: http://localhost:4317
+    randomSampling: true
+binds:
+- port: 3000
+  listeners:
+  - routes:
+    - matches:
+      - path:
+          pathPrefix: /agents/
+      policies:
+        cors:
+          allowOrigins:
+          - '*'
+          allowHeaders:
+          - content-type
+          - cache-control
+          - mcp-protocol-version
+      backends:
+      - service:
+          name: default/localhost
+          port: 6000
+      - service:
+          name: default/localhost
+          port: 6002
+- port: 3001
+  listeners:
+  - routes:
+    - backends:
+      - ai:
+          name: openai
+          provider:
+            openAI: {}
+          routes:
+            /v1/chat/completions: completions
+            /v1/models: passthrough
+            '*': passthrough

@@ -20,6 +20,16 @@ Frontend → Backend API → Deployment Service → NEST Infrastructure → Cust
                               Stress Test Service → LLM Grader → Results Service
 ```
 
+### With Observability (agentgateway + Jaeger)
+
+```
+Frontend → Backend API → agentgateway (A2A Proxy) → Customer Agents
+                                    ↓
+                         agentgateway (OpenAI Proxy) → OpenAI API
+                                    ↓
+                                 Jaeger (Traces)
+```
+
 ## Features
 
 - ✅ **Local & Cloud Deployment**: Deploy agents locally for testing or on AWS EC2 for production
@@ -122,6 +132,81 @@ aws configure
 # OR set environment variables:
 export AWS_ACCESS_KEY_ID=your_access_key
 export AWS_SECRET_ACCESS_KEY=your_secret_key
+```
+
+## Observability Setup (Optional but Recommended)
+
+The platform supports integration with agentgateway and Jaeger for observability and tracing of agent interactions and LLM calls.
+
+### Prerequisites
+
+- Docker (for Jaeger)
+- agentgateway binary (will be installed automatically by script)
+
+### Quick Start
+
+```bash
+# Start observability stack (Jaeger + agentgateway)
+./scripts/start-observability.sh
+```
+
+This will:
+- Start Jaeger UI at `http://localhost:16686`
+- Start agentgateway with:
+  - A2A proxy on port 3000
+  - OpenAI proxy on port 3001
+  - Admin UI on port 15000
+
+### Manual Setup
+
+#### 1. Start Jaeger
+
+```bash
+# Use 'docker compose' (V2) or 'docker-compose' (V1)
+docker compose -f docker-compose.jaeger.yml up -d
+```
+
+Access Jaeger UI at: `http://localhost:16686`
+
+#### 2. Install agentgateway
+
+```bash
+curl https://raw.githubusercontent.com/agentgateway/agentgateway/refs/heads/main/common/scripts/get-agentgateway | bash
+```
+
+#### 3. Start agentgateway
+
+```bash
+agentgateway -f config/agentgateway.yaml
+```
+
+### How It Works
+
+When deploying agents locally with observability enabled:
+
+1. **A2A Requests**: All agent-to-agent communication is proxied through agentgateway (port 3000), which automatically traces these requests.
+
+2. **OpenAI Calls**: Agent's OpenAI API calls are automatically routed through agentgateway's OpenAI proxy (port 3001) via the `OPENAI_BASE_URL` environment variable. This requires no code changes to your agent.
+
+3. **Tracing**: Both A2A requests and OpenAI calls are automatically traced and exported to Jaeger for visualization.
+
+### Viewing Traces
+
+1. Open Jaeger UI: `http://localhost:16686`
+2. Select service: `agentgateway-local` or your agent service
+3. Click "Find Traces" to see all traces
+4. Click on a trace to see detailed span information including:
+   - A2A request/response details
+   - OpenAI API call details (model, tokens, latency, etc.)
+
+### Architecture
+
+```
+Frontend → Backend API → agentgateway (port 3000) → Agent
+                              ↓
+                    agentgateway (port 3001) → OpenAI API
+                              ↓
+                         Jaeger (traces)
 ```
 
 ## Running the API Server

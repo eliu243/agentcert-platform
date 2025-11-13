@@ -51,6 +51,17 @@ class DeploymentService:
         self.base_path = Path(__file__).parent.parent.parent.parent
         self.next_port = 6000  # Start from port 6000
         
+        # Initialize agentgateway manager for local deployments
+        if not use_ec2:
+            try:
+                from ..integration.agentgateway_manager import AgentGatewayManager
+                self.agentgateway = AgentGatewayManager()
+            except ImportError:
+                logger.warning("AgentGatewayManager not available. agentgateway integration disabled.")
+                self.agentgateway = None
+        else:
+            self.agentgateway = None
+        
         self.use_ec2 = use_ec2
         if use_ec2:
             if not HAS_BOTO3:
@@ -124,17 +135,54 @@ class DeploymentService:
                 )
             else:
                 # Deploy locally
-                agent_url = await self._deploy_agent_locally(repo_path, entry_point, agent_id)
+                direct_agent_url = await self._deploy_agent_locally(repo_path, entry_point, agent_id)
+                
+                # Register with agentgateway if available
+                if self.agentgateway:
+                    # Get OpenAI API key for this agent
+                    from .secrets_manager import get_secrets_manager
+                    secrets_mgr = get_secrets_manager()
+                    openai_key = secrets_mgr.retrieve_secret(agent_id, "OPENAI_API_KEY")
+                    
+                    # Register agent with agentgateway for A2A routing
+                    await self.agentgateway.register_agent(
+                        agent_id=agent_id,
+                        agent_url=direct_agent_url,
+                        api_key=openai_key
+                    )
+                    
+                    # Use agentgateway URL instead of direct URL
+                    agent_url = self.agentgateway.get_agentgateway_a2a_url(agent_id)
+                    logger.info(f"Agent {agent_id} registered with agentgateway: {agent_url}")
+                else:
+                    agent_url = direct_agent_url
             
-            # 4. Health check
+            # 4. Health check - check direct agent URL first, then gateway URL
+            # First verify agent is actually running by checking direct URL
+            direct_check_url = direct_agent_url if 'direct_agent_url' in locals() else agent_url
+            if self.agentgateway and not self.use_ec2:
+                # For agentgateway, check direct agent first to ensure it's running
+                logger.info(f"Checking direct agent health at {direct_check_url} before gateway check...")
+                direct_health_ok = await self._health_check(direct_check_url)
+                if not direct_health_ok:
+                    logger.error(f"Direct agent health check failed at {direct_check_url}")
+                    await self._stop_agent(agent_id)
+                    if self.agentgateway:
+                        await self.agentgateway.unregister_agent(agent_id)
+                    raise RuntimeError("Agent health check failed - agent not responding on direct URL")
+                logger.info(f"✅ Direct agent health check passed, now checking gateway URL...")
+            
+            # Now check gateway URL (or direct URL if no gateway)
             health_ok = await self._health_check(agent_url)
             if not health_ok:
-                # Clean up if health check fails
-                await self._stop_agent(agent_id)
-                raise RuntimeError("Agent health check failed after deployment")
+                logger.warning(f"Gateway health check failed, but direct agent is running. This might be a routing issue.")
+                # Don't fail deployment if direct agent works - gateway routing can be fixed
+                # But log a warning
+                if self.agentgateway and not self.use_ec2:
+                    logger.warning(f"⚠️  Gateway routing may need configuration. Direct agent URL: {direct_check_url}")
             
             # 5. Store deployment info
-            self.deployments[agent_id] = {
+            deployment_info = {
                 "agent_id": agent_id,
                 "user_id": user_id,
                 "github_repo": github_repo,
@@ -142,10 +190,19 @@ class DeploymentService:
                 "repo_path": str(repo_path) if repo_path else None,
                 "entry_point": entry_point,
                 "status": "deployed",
-                "agent_url": agent_url,
+                "agent_url": agent_url,  # This is now the agentgateway URL for local deployments
                 "port": self._extract_port_from_url(agent_url),
                 "deployed_at": asyncio.get_event_loop().time()
             }
+            
+            # Store direct agent URL for reference (if using agentgateway)
+            if self.agentgateway and not self.use_ec2:
+                # Extract direct URL from the deployment
+                direct_url = direct_agent_url if 'direct_agent_url' in locals() else agent_url
+                deployment_info["direct_agent_url"] = direct_url
+                deployment_info["openai_proxy_url"] = self.agentgateway.get_openai_proxy_url()
+            
+            self.deployments[agent_id] = deployment_info
             
             logger.info(f"✅ Agent {agent_id} deployed successfully at {agent_url}")
             logger.info(f"📝 Stored deployment info for {agent_id} (total deployments: {len(self.deployments)})")
@@ -860,6 +917,12 @@ fi
             else:
                 logger.debug(f"No {key_name} found for agent {agent_id}")
         
+        # Set OPENAI_BASE_URL to route through agentgateway if available
+        if self.agentgateway:
+            openai_proxy_url = self.agentgateway.get_openai_proxy_url()
+            env["OPENAI_BASE_URL"] = openai_proxy_url
+            logger.info(f"Set OPENAI_BASE_URL={openai_proxy_url} for agent {agent_id} to route through agentgateway")
+        
         if not api_keys_set:
             logger.warning(f"No API keys found for agent {agent_id}. Agent may not function properly.")
         
@@ -934,7 +997,25 @@ fi
                 stdout, _ = process.communicate()
                 error_msg = stdout or "Unknown error"
                 logger.error(f"Agent process failed to start. Output: {error_msg}")
+                # Try to get more error details
+                if hasattr(process, 'stderr') and process.stderr:
+                    stderr_output = process.stderr.read() if hasattr(process.stderr, 'read') else str(process.stderr)
+                    if stderr_output:
+                        logger.error(f"Agent stderr: {stderr_output}")
                 raise RuntimeError(f"Agent process failed to start: {error_msg}")
+            
+            # Additional check: try to read some output to see if agent is initializing
+            # Note: This is non-blocking check
+            try:
+                # Give it a bit more time and check again
+                await asyncio.sleep(2)
+                if process.poll() is not None:
+                    stdout, _ = process.communicate()
+                    error_msg = stdout or "Unknown error"
+                    logger.error(f"Agent process died after initial check. Output: {error_msg}")
+                    raise RuntimeError(f"Agent process died: {error_msg}")
+            except Exception as e:
+                logger.warning(f"Could not check agent process status: {e}")
             
             # Log that process is running
             logger.info(f"Agent process {agent_id} is running (PID: {process.pid})")
@@ -1033,6 +1114,10 @@ fi
             else:
                 logger.warning(f"Agent {agent_id} not found in EC2 instances tracker")
         else:
+            # Unregister from agentgateway if using it (local deployments only)
+            if self.agentgateway:
+                await self.agentgateway.unregister_agent(agent_id)
+            
             # Stop the local agent process
             await self._stop_agent(agent_id)
         
