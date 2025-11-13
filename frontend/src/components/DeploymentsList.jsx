@@ -1,17 +1,31 @@
 import { useState, useEffect } from 'react';
-import { listDeployments, undeployAgent } from '../services/api';
+import { listDeployments, undeployAgent, makeAgentPublic, makeAgentPrivate, listPublicAgents } from '../services/api';
 import StatusBadge from './StatusBadge';
 import LoadingSpinner from './LoadingSpinner';
 
-const DeploymentsList = ({ onRunTest, onViewResults, onDeploymentDeleted }) => {
+const DeploymentsList = ({ onRunTest, onViewResults, onViewReports, onDeploymentDeleted }) => {
   const [deployments, setDeployments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deletingAgents, setDeletingAgents] = useState(new Set());
+  const [publicAgents, setPublicAgents] = useState(new Set());
+  const [togglingPublic, setTogglingPublic] = useState(new Set());
 
   useEffect(() => {
     loadDeployments(true);
+    loadPublicAgents();
   }, []);
+
+  const loadPublicAgents = async () => {
+    try {
+      const publicAgentsList = await listPublicAgents();
+      const publicSet = new Set(publicAgentsList.map(a => a.agent_id));
+      setPublicAgents(publicSet);
+    } catch (err) {
+      // Silently fail - public agents list is optional
+      console.error('Failed to load public agents:', err);
+    }
+  };
 
   const loadDeployments = async (showLoading = false) => {
     if (showLoading) {
@@ -80,6 +94,48 @@ const DeploymentsList = ({ onRunTest, onViewResults, onDeploymentDeleted }) => {
     }
   };
 
+  const handleViewReports = (agentId) => {
+    if (onViewReports) {
+      onViewReports(agentId);
+    }
+  };
+
+  const handleMakePublic = async (agentId) => {
+    setTogglingPublic(prev => new Set(prev).add(agentId));
+    try {
+      await makeAgentPublic(agentId);
+      await loadPublicAgents();
+      setError(null);
+    } catch (err) {
+      setError(err.message || 'Failed to make agent public');
+    } finally {
+      setTogglingPublic(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(agentId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleMakePrivate = async (agentId) => {
+    setTogglingPublic(prev => new Set(prev).add(agentId));
+    try {
+      await makeAgentPrivate(agentId);
+      await loadPublicAgents();
+      setError(null);
+    } catch (err) {
+      setError(err.message || 'Failed to make agent private');
+    } finally {
+      setTogglingPublic(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(agentId);
+        return newSet;
+      });
+    }
+  };
+
+  const isPublic = (agentId) => publicAgents.has(agentId);
+
   if (loading) {
     return (
       <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl shadow-lg p-6 transition-colors">
@@ -145,6 +201,11 @@ const DeploymentsList = ({ onRunTest, onViewResults, onDeploymentDeleted }) => {
                       {deployment.agent_id}
                     </h3>
                     <StatusBadge status={deployment.status || 'deployed'} />
+                    {isPublic(deployment.agent_id) && (
+                      <span className="px-2 py-1 bg-green-600/20 text-green-400 text-xs rounded border border-green-600/50">
+                        Public
+                      </span>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -212,6 +273,45 @@ const DeploymentsList = ({ onRunTest, onViewResults, onDeploymentDeleted }) => {
                   >
                     View Results
                   </button>
+                  {isPublic(deployment.agent_id) && (
+                    <button
+                      onClick={() => handleViewReports(deployment.agent_id)}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm transition-colors font-medium"
+                    >
+                      View Reports
+                    </button>
+                  )}
+                  {isPublic(deployment.agent_id) ? (
+                    <button
+                      onClick={() => handleMakePrivate(deployment.agent_id)}
+                      disabled={togglingPublic.has(deployment.agent_id)}
+                      className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-sm transition-colors flex items-center justify-center gap-2"
+                    >
+                      {togglingPublic.has(deployment.agent_id) ? (
+                        <>
+                          <LoadingSpinner size="sm" />
+                          <span>Updating...</span>
+                        </>
+                      ) : (
+                        'Make Private'
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleMakePublic(deployment.agent_id)}
+                      disabled={togglingPublic.has(deployment.agent_id)}
+                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-sm transition-colors flex items-center justify-center gap-2"
+                    >
+                      {togglingPublic.has(deployment.agent_id) ? (
+                        <>
+                          <LoadingSpinner size="sm" />
+                          <span>Updating...</span>
+                        </>
+                      ) : (
+                        'Make Public'
+                      )}
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDelete(deployment.agent_id)}
                     disabled={deletingAgents.has(deployment.agent_id)}

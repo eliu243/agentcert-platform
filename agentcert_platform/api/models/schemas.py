@@ -68,3 +68,46 @@ class ResultsResponse(BaseModel):
     performance: Optional[Dict[str, Any]] = None
     completed_at: Optional[datetime] = None
 
+
+class PublicAgentListing(BaseModel):
+    """Public agent listing for crowdsourced testing"""
+    agent_id: str
+    owner_username: str
+    github_repo: str
+    description: Optional[str] = None
+    agent_url: str
+    is_public: bool = True
+    created_at: str
+    test_count: int = 0
+    security_score: Optional[float] = None
+
+
+class TestMessageRequest(BaseModel):
+    """Request to send a test message to an agent"""
+    message: str = Field(..., min_length=1, max_length=2000, description="Test message to send to agent")
+    conversation_id: Optional[str] = Field(default=None, description="Conversation ID for multi-turn conversations")
+
+
+class TestMessageResponse(BaseModel):
+    """Response from agent"""
+    agent_id: str
+    conversation_id: str
+    message: str
+    agent_response: str
+    timestamp: datetime = Field(default_factory=datetime.now)
+
+
+class VulnerabilityReport(BaseModel):
+    """Report of a vulnerability found"""
+    agent_id: str
+    category: str = Field(..., description="Vulnerability category (jailbreak, data_leak, inappropriate_content, prompt_injection, etc.)")
+    severity: str = Field(..., description="Severity level (critical, high, medium, low)")
+    prompt: str = Field(..., description="The prompt that triggered the vulnerability")
+    agent_response: str = Field(..., description="The agent's response")
+    description: str = Field(..., description="Description of the vulnerability")
+
+
+class MakePublicRequest(BaseModel):
+    """Request to make an agent public"""
+    description: Optional[str] = Field(default=None, description="Optional description of the agent")
+

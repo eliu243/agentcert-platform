@@ -7,12 +7,14 @@ import DeploymentsList from './components/DeploymentsList';
 import HomePage from './components/HomePage';
 import ProfileDropdown from './components/ProfileDropdown';
 import ProtectedRoute from './components/ProtectedRoute';
+import PublicTesting from './components/PublicTesting';
+import VulnerabilityReports from './components/VulnerabilityReports';
 
 function AppContent() {
   const { authenticated, loading, user, reloadUser } = useAuth();
   const [activeTab, setActiveTab] = useState('home'); // 'home', 'deploy', 'deployments'
   const [deploymentsKey, setDeploymentsKey] = useState(0); // Key to force refresh deployments list
-  const [deploymentsView, setDeploymentsView] = useState('list'); // 'list', 'test', 'results'
+  const [deploymentsView, setDeploymentsView] = useState('list'); // 'list', 'test', 'results', 'reports'
   const [selectedAgentId, setSelectedAgentId] = useState(null);
 
   // Set dark mode as default on mount (always enabled)
@@ -47,6 +49,11 @@ function AppContent() {
   const handleViewResults = (agentId) => {
     setSelectedAgentId(agentId);
     setDeploymentsView('results');
+  };
+
+  const handleViewReports = (agentId) => {
+    setSelectedAgentId(agentId);
+    setDeploymentsView('reports');
   };
 
   const handleTestComplete = (agentId) => {
@@ -100,7 +107,10 @@ function AppContent() {
               <div className="overflow-visible" style={{ paddingBottom: '0.15em', minHeight: 'fit-content' }}>
                 <h1 
                   className="text-4xl font-extrabold gradient-text cursor-pointer hover:scale-105 transition-transform"
-                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                  onClick={() => {
+                    setActiveTab('home');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
                 >
                   AgentCert
                 </h1>
@@ -111,7 +121,46 @@ function AppContent() {
             </div>
           </div>
         </header>
-        <HomePage />
+
+        {/* Navigation Tabs */}
+        <div className="bg-slate-900/60 backdrop-blur-sm border-b border-slate-800/50">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <nav className="flex space-x-8">
+              <button
+                onClick={() => {
+                  setActiveTab('home');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`py-4 px-1 border-b-2 font-semibold text-sm transition-all ${
+                  activeTab === 'home'
+                    ? 'border-cyan-400 text-cyan-400'
+                    : 'border-transparent text-gray-400 hover:text-cyan-300 hover:border-cyan-300/50'
+                }`}
+              >
+                Home
+              </button>
+              <button
+                onClick={() => setActiveTab('public-testing')}
+                className={`py-4 px-1 border-b-2 font-semibold text-sm transition-all ${
+                  activeTab === 'public-testing'
+                    ? 'border-cyan-400 text-cyan-400'
+                    : 'border-transparent text-gray-400 hover:text-cyan-300 hover:border-cyan-300/50'
+                }`}
+              >
+                Public Testing
+              </button>
+            </nav>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <main className={activeTab === 'home' ? '' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'}>
+          {activeTab === 'home' && (
+            <HomePage onNavigateToDeploy={() => setActiveTab('public-testing')} />
+          )}
+          {activeTab === 'public-testing' && <PublicTesting />}
+        </main>
+
         {/* Footer */}
         <footer className="bg-slate-900/80 backdrop-blur-md border-t border-slate-800/50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -189,6 +238,16 @@ function AppContent() {
             >
               Deployments
             </button>
+            <button
+              onClick={() => setActiveTab('public-testing')}
+              className={`py-4 px-1 border-b-2 font-semibold text-sm transition-all ${
+                activeTab === 'public-testing'
+                  ? 'border-cyan-400 text-cyan-400'
+                  : 'border-transparent text-gray-400 hover:text-cyan-300 hover:border-cyan-300/50'
+              }`}
+            >
+              Public Testing
+            </button>
           </nav>
         </div>
       </div>
@@ -212,6 +271,7 @@ function AppContent() {
                 key={deploymentsKey}
                 onRunTest={handleRunTest}
                 onViewResults={handleViewResults}
+                onViewReports={handleViewReports}
                 onDeploymentDeleted={handleDeploymentDeleted}
               />
             )}
@@ -249,7 +309,25 @@ function AppContent() {
                 />
               </div>
             )}
+            {deploymentsView === 'reports' && selectedAgentId && (
+              <div>
+                <button
+                  onClick={handleBackToDeployments}
+                  className="mb-6 flex items-center gap-2 px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-lg text-gray-300 hover:text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Back to Deployments
+                </button>
+                <VulnerabilityReports agentId={selectedAgentId} />
+              </div>
+            )}
           </div>
+        )}
+
+        {activeTab === 'public-testing' && (
+          <PublicTesting />
         )}
       </main>
 

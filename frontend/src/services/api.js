@@ -197,3 +197,117 @@ export const getConfig = async () => {
   }
 };
 
+/**
+ * List all publicly available agents for testing
+ * @returns {Promise} List of public agents
+ */
+export const listPublicAgents = async () => {
+  try {
+    const response = await api.get('/api/public/agents');
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to list public agents');
+  }
+};
+
+/**
+ * Send a test message to a public agent
+ * @param {string} agentId - Agent ID
+ * @param {string} message - Test message
+ * @param {string} conversationId - Optional conversation ID for multi-turn conversations
+ * @returns {Promise} Agent response
+ */
+export const testAgent = async (agentId, message, conversationId = null) => {
+  try {
+    const payload = { message };
+    if (conversationId) {
+      payload.conversation_id = conversationId;
+    }
+    const response = await api.post(`/api/public/agents/${agentId}/test`, payload);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to test agent');
+  }
+};
+
+/**
+ * Report a vulnerability found in an agent
+ * @param {string} agentId - Agent ID
+ * @param {Object} report - Vulnerability report object
+ * @returns {Promise} Report submission response
+ */
+export const reportVulnerability = async (agentId, report) => {
+  try {
+    const payload = {
+      agent_id: agentId,
+      ...report
+    };
+    const response = await api.post(`/api/public/agents/${agentId}/report`, payload);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to report vulnerability');
+  }
+};
+
+/**
+ * Get vulnerability reports for an agent (owner only)
+ * @param {string} agentId - Agent ID
+ * @returns {Promise} Vulnerability reports
+ */
+export const getVulnerabilityReports = async (agentId) => {
+  try {
+    const response = await api.get(`/api/public/agents/${agentId}/reports`);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to get vulnerability reports');
+  }
+};
+
+/**
+ * Make an agent publicly available for testing
+ * @param {string} agentId - Agent ID
+ * @param {string} description - Optional description
+ * @returns {Promise} Response
+ */
+export const makeAgentPublic = async (agentId, description = null) => {
+  try {
+    const payload = {};
+    if (description) {
+      payload.description = description;
+    }
+    const response = await api.post(`/api/deploy/${agentId}/make-public`, payload);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to make agent public');
+  }
+};
+
+/**
+ * Make an agent private (remove from public testing)
+ * @param {string} agentId - Agent ID
+ * @returns {Promise} Response
+ */
+export const makeAgentPrivate = async (agentId) => {
+  try {
+    const response = await api.post(`/api/deploy/${agentId}/make-private`);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to make agent private');
+  }
+};
+
+/**
+ * Mark a vulnerability report as addressed
+ * @param {string} agentId - Agent ID
+ * @param {string} reportId - Report ID
+ * @returns {Promise} Response
+ */
+export const markReportAddressed = async (agentId, reportId) => {
+  try {
+    const response = await api.post(`/api/public/agents/${agentId}/reports/${reportId}/addressed`);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || error.message || 'Failed to mark report as addressed');
+  }
+};
+

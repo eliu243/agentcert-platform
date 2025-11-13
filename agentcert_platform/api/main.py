@@ -7,7 +7,7 @@ import os
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routes import deploy, test, results, auth
+from .routes import deploy, test, results, auth, public_test
 
 # Configure logging
 logging.basicConfig(
@@ -47,6 +47,7 @@ app.include_router(auth.router, prefix="/api", tags=["authentication"])
 app.include_router(deploy.router, prefix="/api", tags=["deployment"])
 app.include_router(test.router, prefix="/api", tags=["testing"])
 app.include_router(results.router, prefix="/api", tags=["results"])
+app.include_router(public_test.router, prefix="/api", tags=["public-testing"])
 
 
 @app.on_event("startup")
